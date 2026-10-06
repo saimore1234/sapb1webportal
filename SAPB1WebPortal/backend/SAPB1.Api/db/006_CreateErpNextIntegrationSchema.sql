@@ -2,7 +2,7 @@
 -- ErpNextInvoiceLink : one row per (CompanyCode, DocEntry) A/R Invoice pushed to ERPNext.
 -- ErpNextActionLog   : safe audit trail of every ERPNext action (test, setup, preview, push).
 -- Idempotent: safe to re-run. Run once with:
---   sqlcmd -S <server> -d SAPB1PortalAdmin -E -C -i 005_CreateErpNextIntegrationSchema.sql
+--   sqlcmd -S <server> -d SAPB1PortalAdmin -E -C -i 006_CreateErpNextIntegrationSchema.sql
 
 IF OBJECT_ID('dbo.ErpNextInvoiceLink', 'U') IS NULL
 CREATE TABLE dbo.ErpNextInvoiceLink (

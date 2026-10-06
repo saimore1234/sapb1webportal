@@ -1,7 +1,7 @@
 -- E-Invoice (IRN) and E-Way Bill results on the ERPNext link row, plus their permissions.
 -- All of it lives in the PORTAL database (SAPB1PortalAdmin); nothing is written to SAP.
 -- Idempotent: safe to re-run. Run once with:
---   sqlcmd -S <server> -d SAPB1PortalAdmin -E -C -i 007_ErpNextEInvoiceEwayBill.sql
+--   sqlcmd -S <server> -d SAPB1PortalAdmin -E -C -i 008_ErpNextEInvoiceEwayBill.sql
 
 SET NOCOUNT ON;
 

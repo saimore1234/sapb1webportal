@@ -1,6 +1,6 @@
 -- Cancellation of e-invoices (IRN) and e-way bills, recorded on the ERPNext link row, plus the cancel permission.
 -- PORTAL database only (SAPB1PortalAdmin); nothing is written to SAP. Idempotent: safe to re-run.
---   sqlcmd -S <server> -d SAPB1PortalAdmin -E -C -i 008_ErpNextCancel.sql
+--   sqlcmd -S <server> -d SAPB1PortalAdmin -E -C -i 009_ErpNextCancel.sql
 
 SET NOCOUNT ON;
 
