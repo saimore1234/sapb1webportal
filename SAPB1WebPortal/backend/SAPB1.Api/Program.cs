@@ -12,6 +12,7 @@ using SAPB1.Api.Interfaces;
 using SAPB1.Api.Middleware;
 using SAPB1.Api.Models;
 using SAPB1.Api.Services;
+using SAPB1.Api.Services.ErpNext;
 using Serilog;
 
 // ---------------------------------------------------------------
@@ -141,6 +142,25 @@ builder.Services.AddHttpClient("SapServiceLayerWrite", client =>
 builder.Services.AddSingleton<ISapServiceLayerSessionManager, SapServiceLayerSessionManager>();
 builder.Services.AddScoped<IPurchaseRequestWriteService, SapServiceLayerPurchaseWriteService>();
 
+// ---------------------------------------------------------------
+// ERPNext integration — per-company settings come only from
+// "ErpNext:Companies:{CompanyCode}" in user-secrets/env (never the request).
+// Pushes A/R Invoices to ERPNext; never writes to SAP B1.
+// ---------------------------------------------------------------
+builder.Services.AddHttpClient("ErpNext", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddScoped<IErpNextConfigProvider, ErpNextConfigProvider>();
+builder.Services.AddScoped<IErpNextClient, ErpNextClient>();
+builder.Services.AddScoped<IErpNextActionLog, SqlErpNextActionLog>();
+builder.Services.AddScoped<IErpNextAdminService, ErpNextAdminService>();
+builder.Services.AddScoped<ISapInvoiceReader, SqlSapInvoiceReader>();
+builder.Services.AddScoped<IErpNextLinkStore, SqlErpNextLinkStore>();
+builder.Services.AddScoped<ErpNextMasterSync>();
+builder.Services.AddScoped<IErpNextInvoiceService, ErpNextInvoiceService>();
+builder.Services.AddScoped<IErpNextComplianceService, ErpNextComplianceService>();
+
 builder.Services.AddSingleton<ITokenRevocationStore, TokenRevocationStore>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -214,6 +234,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    // Sales and Purchase each define a class named RelatedDocumentDto; the default
+    // short-name schema ids collide and make /swagger/v1/swagger.json return 500.
+    options.CustomSchemaIds(type => type.FullName!.Replace("+", "."));
+
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "SAP Business One Web Portal API",

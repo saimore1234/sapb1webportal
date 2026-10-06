@@ -1,5 +1,6 @@
 import { CheckCircle2, Wallet } from 'lucide-react';
 import SalesDocumentDetail from '../../components/sales/SalesDocumentDetail';
+import ErpNextInvoicePanel from '../../components/sales/ErpNextInvoicePanel';
 import { getArInvoiceByEntry } from '../../api/sales';
 
 function formatMoney(value: number, currency: string | null) {
@@ -28,6 +29,7 @@ export default function ArInvoiceDetail() {
         { label: 'Paid', value: formatMoney(d.paid, d.currency), icon: CheckCircle2, accent: 'green' },
         { label: 'Balance', value: formatMoney(d.balance, d.currency), icon: Wallet, accent: d.balance > 0 ? 'amber' : 'slate' }
       ]}
+      extraSections={(d) => <ErpNextInvoicePanel docEntry={d.docEntry} docNum={d.docNum} currency={d.currency} />}
     />
   );
 }

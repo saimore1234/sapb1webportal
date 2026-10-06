@@ -46,6 +46,8 @@ interface SalesDocumentDetailProps<T extends DetailBase> {
   subtitle?: (doc: T) => string | null | undefined;
   extraFields: (doc: T) => ExtraField[];
   extraStatCards?: (doc: T) => ExtraStatCard[];
+  /** Optional extra card(s) shown under the summary — e.g. the ERPNext panel on A/R Invoices. */
+  extraSections?: (doc: T) => React.ReactNode;
 }
 
 function formatDate(value: string | null | undefined) {
@@ -79,7 +81,8 @@ export default function SalesDocumentDetail<T extends DetailBase>({
   title,
   subtitle,
   extraFields,
-  extraStatCards
+  extraStatCards,
+  extraSections
 }: SalesDocumentDetailProps<T>) {
   const { docEntry: docEntryParam = '' } = useParams();
   const docEntry = Number(docEntryParam);
@@ -150,6 +153,8 @@ export default function SalesDocumentDetail<T extends DetailBase>({
           ))}
         </div>
       )}
+
+      {extraSections?.(doc)}
 
       {doc.lines.length > 0 && (
         <div className="card p-0 overflow-hidden">
