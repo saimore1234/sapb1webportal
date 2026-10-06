@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Menu as MenuIcon, LogOut, Moon, Sun } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import { navItems } from './navigation';
+import { filterNavigation } from '../permissions/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -15,10 +16,10 @@ const tabs = [
 export default function MobileBottomNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, access, canAccessPath } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  const moreItems = navItems.filter((i) => !['dashboard', 'items'].includes(i.key));
+  const moreItems = filterNavigation(navItems, access).filter((i) => !['dashboard', 'items'].includes(i.key));
 
   return (
     <>
@@ -26,7 +27,7 @@ export default function MobileBottomNav() {
         className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-surface border-t border-border flex items-stretch"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {tabs.map((tab) => (
+        {tabs.filter((tab) => canAccessPath(tab.to)).map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}

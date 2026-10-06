@@ -4,6 +4,7 @@ import { ChevronDown, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { navItems as allNavItems } from './navigation';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useAuth } from '../context/AuthContext';
+import { filterNavigation } from '../permissions/navigation';
 
 interface SidebarProps {
   open: boolean;
@@ -14,22 +15,11 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose, collapsed, onToggleCollapsed }: SidebarProps) {
   const location = useLocation();
-  const { can } = useAuth();
+  const { access } = useAuth();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
-  // Hide any item (or whole group) the current user lacks the permission for —
-  // items with no requiredPermission are unaffected, same as before RBAC existed.
-  const navItems = useMemo(
-    () =>
-      allNavItems
-        .filter((item) => !item.requiredPermission || can(item.requiredPermission))
-        .map((item) =>
-          item.children
-            ? { ...item, children: item.children.filter((c) => !c.requiredPermission || can(c.requiredPermission)) }
-            : item
-        ),
-    [can]
-  );
+  // Permission-driven: the registry tree is filtered by the central permission service.
+  const navItems = useMemo(() => filterNavigation(allNavItems, access), [access]);
   // "collapsed" is a desktop-only preference — the mobile drawer is always
   // shown at full width regardless of it, so every label/chevron below reads
   // this instead of the raw prop.

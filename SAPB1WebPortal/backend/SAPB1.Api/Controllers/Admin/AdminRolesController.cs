@@ -61,7 +61,15 @@ public class AdminRolesController : ControllerBase
     [RequirePermission("Administration.Edit")]
     public async Task<ActionResult<ApiResponse<object>>> UpdatePermissions(int id, [FromBody] UpdateRolePermissionsDto dto, CancellationToken ct)
     {
-        var ok = await _adminService.UpdateRolePermissionsAsync(id, dto.PermissionKeys, ct);
+        bool ok;
+        try
+        {
+            ok = await _adminService.UpdateRolePermissionsAsync(id, dto.PermissionKeys, dto.PagePermissions, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(503, ApiResponse<object>.Fail(ex.Message));
+        }
         if (!ok) return BadRequest(ApiResponse<object>.Fail("Role not found, or it is the built-in Administrator role, which always has every permission."));
         return Ok(ApiResponse<object>.Ok(new { }, "Permissions saved."));
     }

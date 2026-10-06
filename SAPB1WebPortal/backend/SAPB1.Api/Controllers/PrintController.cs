@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SAPB1.Api.Auth;
 using SAPB1.Api.DTOs.Common;
 using SAPB1.Api.Interfaces;
 using SAPB1.Api.Models;
@@ -46,11 +47,10 @@ public class PrintController : ControllerBase
     private async Task<IActionResult?> CheckPermissionAsync(string documentType, CancellationToken ct)
     {
         var permission = SapB1PrintService.PermissionFor(documentType)!;
-        if (User.IsInRole(Roles.Admin)) return null;
-        var role = User.FindFirstValue(ClaimTypes.Role);
-        var perms = string.IsNullOrWhiteSpace(role) ? null : await _admin.GetPermissionsForRoleNameAsync(role, ct);
-        return perms is null || !perms.Contains(permission)
-            ? StatusCode(403, ApiResponse<object>.Fail("You do not have permission to perform this action."))
+        var access = await RoleAccessResolver.ResolveAsync(HttpContext);
+        var parts = permission.Split('.');
+        return access is null || !access.Allows(parts[0], null, parts[1])
+            ? RoleAccessResolver.Forbidden()
             : null;
     }
 

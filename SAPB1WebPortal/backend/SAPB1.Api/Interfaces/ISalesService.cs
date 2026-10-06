@@ -15,6 +15,8 @@ public interface ISalesService
 {
     Task<SalesDashboardDto> GetDashboardAsync(CancellationToken ct = default);
     Task<SalesAnalyticsDto> GetAnalyticsAsync(CancellationToken ct = default);
+    Task<SalesOverviewDto> GetOverviewAsync(CancellationToken ct = default);
+    Task<OpenSalesOrdersDto> GetOpenOrdersBoardAsync(string? filter, string? search, int page, int pageSize, CancellationToken ct = default);
 
     Task<PagedResult<SalesQuotationDto>> GetQuotationsAsync(SalesDocumentQuery query, CancellationToken ct = default);
     Task<SalesQuotationDetailDto?> GetQuotationByEntryAsync(int docEntry, CancellationToken ct = default);

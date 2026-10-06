@@ -10,8 +10,10 @@ import { ErrorState, EmptyState } from '../components/StateViews';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import ResponsiveTable, { type ColumnDef } from '../components/ui/ResponsiveTable';
 import { useToast } from '../context/ToastContext';
+import { usePermissions } from '../permissions/usePermissions';
 
 export default function Items() {
+  const { canExport } = usePermissions();
   const navigate = useNavigate();
   const { show } = useToast();
   const [result, setResult] = useState<PagedResult<ItemListItem> | null>(null);
@@ -95,10 +97,12 @@ export default function Items() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <SearchBar value={search} onChange={setSearch} placeholder="Item code, name, barcode…" />
-          <button className="btn-secondary" onClick={exportCsv} disabled={!result || result.items.length === 0}>
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
-          </button>
+          {canExport && (
+            <button className="btn-secondary" onClick={exportCsv} disabled={!result || result.items.length === 0}>
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+          )}
         </div>
       </div>
 

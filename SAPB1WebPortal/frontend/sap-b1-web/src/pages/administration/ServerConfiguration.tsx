@@ -9,7 +9,7 @@ import ServerConfigurationForm, {
   type ServerConfigFormValues,
   type TestKind
 } from '../../components/admin/ServerConfigurationForm';
-import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../permissions/usePermissions';
 import { useToast } from '../../context/ToastContext';
 import {
   getServerConfigurations,
@@ -161,7 +161,7 @@ function ConfigModalShell({
 }
 
 export default function ServerConfigurationPage() {
-  const { can } = useAuth();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const toast = useToast();
   const [items, setItems] = useState<ServerConfiguration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,9 +182,6 @@ export default function ServerConfigurationPage() {
 
   useEffect(load, []);
 
-  const canCreate = can('ServerConfiguration.Create');
-  const canEdit = can('ServerConfiguration.Edit');
-  const canDelete = can('ServerConfiguration.Delete');
 
   async function toggleActive(item: ServerConfiguration) {
     try {

@@ -8,7 +8,11 @@ export default defineConfig({
   plugins: [react()],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   server: {
-    port: 5173
+    port: 5173,
+    proxy: {
+      // The API's launch profile serves https://localhost:7010 (and redirects http to it); its dev certificate is self-signed.
+      '/api': { target: 'https://localhost:7010', changeOrigin: true, secure: false }
+    }
   },
   build: {
     rollupOptions: {

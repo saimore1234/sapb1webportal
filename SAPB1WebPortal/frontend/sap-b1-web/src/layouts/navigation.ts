@@ -13,12 +13,29 @@ import {
   type LucideIcon
 } from 'lucide-react';
 
+/**
+ * THE application registry. The sidebar, mobile menu, route guard, button
+ * permissions and Administration > Roles all derive from this one tree (see
+ * src/permissions/registry.ts) — adding a module or page here is the ONLY step
+ * needed for it to appear in the menu AND in the Roles permission matrix.
+ *
+ * Permission metadata is all optional and has generic defaults:
+ *  - module key  = item.permissionModule, else PascalCase(item.key)
+ *  - page key    = child.key, else derived from the route relative to its module
+ *  - actions     = item.actions / child.actions, else View, Create, Edit, Delete, Export, Approve
+ * A child that sets its own `permissionModule` becomes a permission module of its own
+ * (e.g. a menu group that bundles several independent modules).
+ */
 export interface NavChild {
   to: string;
   label: string;
   end?: boolean;
-  /** Hides this item unless the current user has this permission (see AuthContext.can). Omitted = always visible to any authenticated user, same as before RBAC existed. */
-  requiredPermission?: string;
+  /** Stable page key used in permission records. Defaults to the route path below the module. */
+  key?: string;
+  /** Makes this child its own permission module instead of a page of its parent item. */
+  permissionModule?: string;
+  /** Actions this page/module supports. Defaults to the six standard actions. */
+  actions?: string[];
 }
 
 export interface NavItem {
@@ -33,9 +50,10 @@ export interface NavItem {
    *  routes to a "Coming soon" page because the backend doesn't expose this
    *  module yet — see README section 14 / the roadmap. Never fabricated data. */
   available: boolean;
-  /** Hides this item (and, for a group, all its children) unless the current
-   *  user has this permission. Omitted = always visible, same as before RBAC existed. */
-  requiredPermission?: string;
+  /** Stable permission module key. Defaults to PascalCase(key). */
+  permissionModule?: string;
+  /** Actions this module supports. Defaults to the six standard actions. */
+  actions?: string[];
 }
 
 export const navItems: NavItem[] = [
@@ -46,8 +64,8 @@ export const navItems: NavItem[] = [
     icon: Users,
     available: true,
     children: [
-      { to: '/customers', label: 'Customers' },
-      { to: '/suppliers', label: 'Suppliers' }
+      { to: '/customers', label: 'Customers', permissionModule: 'Customers' },
+      { to: '/suppliers', label: 'Suppliers', permissionModule: 'Suppliers' }
     ]
   },
   { key: 'items', label: 'Items', icon: Package, to: '/items', available: true },
@@ -58,7 +76,9 @@ export const navItems: NavItem[] = [
     icon: ShoppingCart,
     available: true,
     children: [
-      { to: '/sales', label: 'Dashboard', end: true },
+      { to: '/sales', label: 'Dashboard', end: true, key: 'dashboard' },
+      { to: '/sales/overview', label: 'Sales Overview' },
+      { to: '/sales/reports', label: 'Reports' },
       { to: '/sales/quotations', label: 'Quotations' },
       { to: '/sales/orders', label: 'Orders' },
       { to: '/sales/deliveries', label: 'Deliveries' },
@@ -74,7 +94,7 @@ export const navItems: NavItem[] = [
     icon: ShoppingBag,
     available: true,
     children: [
-      { to: '/purchase', label: 'Dashboard', end: true },
+      { to: '/purchase', label: 'Dashboard', end: true, key: 'dashboard' },
       { to: '/purchase/requests', label: 'Requests' },
       { to: '/purchase/quotations', label: 'Quotations' },
       { to: '/purchase/orders', label: 'Orders' },
@@ -91,7 +111,7 @@ export const navItems: NavItem[] = [
     icon: Factory,
     available: true,
     children: [
-      { to: '/production', label: 'Dashboard', end: true },
+      { to: '/production', label: 'Dashboard', end: true, key: 'dashboard' },
       { to: '/production/boms', label: 'BOM' },
       { to: '/production/orders', label: 'Production Orders' },
       { to: '/production/material-requirements', label: 'Material Requirements' },
@@ -106,7 +126,7 @@ export const navItems: NavItem[] = [
     icon: Wallet,
     available: true,
     children: [
-      { to: '/finance', label: 'Dashboard', end: true },
+      { to: '/finance', label: 'Dashboard', end: true, key: 'dashboard' },
       { to: '/finance/chart-of-accounts', label: 'Chart of Accounts' },
       { to: '/finance/ledger', label: 'General Ledger' },
       { to: '/finance/journal-entries', label: 'Journal Entries' },
@@ -123,6 +143,8 @@ export const navItems: NavItem[] = [
       { to: '/finance/analytics', label: 'Analytics' }
     ]
   },
+  // Placeholder module with no API yet: it has its own permission module, so only
+  // roles explicitly granted "Crm" (and Administrator) see it.
   { key: 'crm', label: 'CRM', icon: Contact, to: '/crm', available: false },
   {
     key: 'reports',
@@ -149,12 +171,16 @@ export const navItems: NavItem[] = [
     label: 'Administration',
     icon: ShieldCheck,
     available: true,
-    requiredPermission: 'Administration.View',
     children: [
       { to: '/administration/users', label: 'Users' },
       { to: '/administration/roles', label: 'Roles' },
       { to: '/administration/permissions', label: 'Permissions' },
-      { to: '/administration/server-configuration', label: 'Server Configuration', requiredPermission: 'ServerConfiguration.View' }
+      {
+        to: '/administration/server-configuration',
+        label: 'Server Configuration',
+        permissionModule: 'ServerConfiguration',
+        actions: ['View', 'Create', 'Edit', 'Delete', 'TestConnection']
+      }
     ]
   }
 ];

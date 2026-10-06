@@ -7,6 +7,7 @@ import type {
   AdminRole,
   CreateRolePayload,
   Permission,
+  PagePermission,
   RolePermissions,
   ServerConfiguration,
   CreateServerConfigurationPayload,
@@ -36,7 +37,8 @@ export const getRoles = () => unwrap<AdminRole[]>(apiClient.get('/admin/roles'),
 export const createRole = (payload: CreateRolePayload) => unwrap<{ id: number }>(apiClient.post('/admin/roles', payload), 'Failed to create role.');
 export const updateRole = (id: number, payload: CreateRolePayload) => apiClient.put(`/admin/roles/${id}`, payload);
 export const getRolePermissions = (id: number) => unwrap<RolePermissions>(apiClient.get(`/admin/roles/${id}/permissions`), 'Failed to load role permissions.');
-export const updateRolePermissions = (id: number, permissionKeys: string[]) => apiClient.put(`/admin/roles/${id}/permissions`, { permissionKeys });
+export const updateRolePermissions = (id: number, permissionKeys: string[], pagePermissions: PagePermission[]) =>
+  apiClient.put(`/admin/roles/${id}/permissions`, { permissionKeys, pagePermissions });
 
 // Permissions
 export const getPermissions = () => unwrap<Permission[]>(apiClient.get('/admin/permissions'), 'Failed to load permissions.');

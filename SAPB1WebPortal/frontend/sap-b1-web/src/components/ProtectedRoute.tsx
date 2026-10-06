@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import AccessDenied from './AccessDenied';
 import { useAuth } from '../context/AuthContext';
 
 interface ProtectedRouteProps {
@@ -9,10 +10,13 @@ interface ProtectedRouteProps {
    *  UX only, the backend independently rejects any API call the user isn't
    *  actually authorized for regardless of this check. */
   requiredPermission?: string;
+  /** Requires this action (e.g. "Create") on whichever module/page the current URL resolves to
+   *  through the navigation registry — no module names at the call site. */
+  requiredAction?: string;
 }
 
-export default function ProtectedRoute({ children, requiredPermission }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, can } = useAuth();
+export default function ProtectedRoute({ children, requiredPermission, requiredAction }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading, can, canAccessPath } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -28,16 +32,8 @@ export default function ProtectedRoute({ children, requiredPermission }: Protect
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredPermission && !can(requiredPermission)) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center px-4">
-        <div className="h-12 w-12 rounded-2xl bg-danger-bg text-danger flex items-center justify-center mb-4">
-          <ShieldAlert className="h-5 w-5" />
-        </div>
-        <h1 className="text-xl font-semibold text-ink-primary mb-1.5">Not authorized</h1>
-        <p className="text-ink-secondary text-sm">You don't have permission to view this page.</p>
-      </div>
-    );
+  if ((requiredPermission && !can(requiredPermission)) || (requiredAction && !canAccessPath(location.pathname, requiredAction))) {
+    return <AccessDenied />;
   }
 
   return children;

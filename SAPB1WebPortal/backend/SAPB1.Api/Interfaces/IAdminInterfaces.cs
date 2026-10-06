@@ -47,10 +47,10 @@ public interface IAdminService
 
     Task<List<PermissionDto>> GetPermissionsAsync(CancellationToken ct = default);
     Task<RolePermissionsDto?> GetRolePermissionsAsync(int roleId, CancellationToken ct = default);
-    Task<bool> UpdateRolePermissionsAsync(int roleId, List<string> permissionKeys, CancellationToken ct = default);
+    Task<bool> UpdateRolePermissionsAsync(int roleId, List<string> permissionKeys, List<PagePermissionDto>? pagePermissions, CancellationToken ct = default);
 
-    /// <summary>Resolved permission keys for a role name — the single method the
-    /// authorization filter (RequirePermissionAttribute) calls on every protected
-    /// request. Returns an empty set for an unknown role rather than throwing.</summary>
-    Task<HashSet<string>> GetPermissionsForRoleNameAsync(string roleName, CancellationToken ct = default);
+    /// <summary>Resolved access for a role name - the single method every authorization
+    /// check (RequirePermissionAttribute, page filter, /auth/me) uses. Unknown role =
+    /// no access; the built-in Administrator (IsSystemRole) = full access.</summary>
+    Task<SAPB1.Api.Auth.RoleAccess> GetRoleAccessAsync(string roleName, CancellationToken ct = default);
 }

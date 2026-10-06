@@ -4,7 +4,7 @@ import { ErrorState, EmptyState } from '../../components/StateViews';
 import { TableSkeleton } from '../../components/ui/Skeleton';
 import ResponsiveTable, { type ColumnDef } from '../../components/ui/ResponsiveTable';
 import Modal from '../../components/ui/Modal';
-import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../permissions/usePermissions';
 import { useToast } from '../../context/ToastContext';
 import { getUsers, getRoles, createUser, updateUser, resetUserPassword, deleteUser } from '../../api/admin';
 import type { AdminUser, AdminRole } from '../../types';
@@ -16,7 +16,7 @@ function formatDate(value: string | null) {
 }
 
 export default function AdminUsersPage() {
-  const { can } = useAuth();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const toast = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<AdminRole[]>([]);
@@ -42,9 +42,6 @@ export default function AdminUsersPage() {
 
   useEffect(load, []);
 
-  const canCreate = can('Administration.Create');
-  const canEdit = can('Administration.Edit');
-  const canDelete = can('Administration.Delete');
 
   const columns: ColumnDef<AdminUser>[] = [
     { key: 'username', header: 'Username', render: (u) => <span className="font-medium text-ink-primary">{u.username}</span> },

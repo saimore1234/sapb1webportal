@@ -40,6 +40,9 @@ const PurchaseAnalytics = lazy(() => import('./pages/purchase/PurchaseAnalytics'
 
 // Sales module — real, API-backed (see backend/SAPB1.Api/Controllers/SalesController.cs)
 const SalesDashboard = lazy(() => import('./pages/sales/SalesDashboard'));
+const SalesOverview = lazy(() => import('./pages/sales/SalesOverview'));
+const SalesReportsHub = lazy(() => import('./pages/sales/reports/SalesReports').then((m) => ({ default: m.SalesReportsHub })));
+const SalesReportPage = lazy(() => import('./pages/sales/reports/SalesReports').then((m) => ({ default: m.SalesReportPage })));
 const SalesQuotations = lazy(() => import('./pages/sales/SalesQuotations'));
 const SalesQuotationDetail = lazy(() => import('./pages/sales/SalesQuotationDetail'));
 const SalesOrders = lazy(() => import('./pages/sales/SalesOrders'));
@@ -144,7 +147,7 @@ export default function App() {
           <Route
             path="purchase/requests/new"
             element={
-              <ProtectedRoute requiredPermission="Purchase.Create">
+              <ProtectedRoute requiredAction="Create">
                 <CreatePurchaseRequest />
               </ProtectedRoute>
             }
@@ -166,6 +169,9 @@ export default function App() {
 
           {/* Sales — real SAP B1 data via GET /api/sales/* */}
           <Route path="sales" element={<SalesDashboard />} />
+          <Route path="sales/overview" element={<SalesOverview />} />
+          <Route path="sales/reports" element={<SalesReportsHub />} />
+          <Route path="sales/reports/:reportId" element={<SalesReportPage />} />
           <Route path="sales/quotations" element={<SalesQuotations />} />
           <Route path="sales/quotations/:docEntry" element={<SalesQuotationDetail />} />
           <Route path="sales/orders" element={<SalesOrders />} />
@@ -235,7 +241,7 @@ export default function App() {
           <Route
             path="administration"
             element={
-              <ProtectedRoute requiredPermission="Administration.View">
+              <ProtectedRoute>
                 <Navigate to="/administration/users" replace />
               </ProtectedRoute>
             }
@@ -243,7 +249,7 @@ export default function App() {
           <Route
             path="administration/users"
             element={
-              <ProtectedRoute requiredPermission="Administration.View">
+              <ProtectedRoute>
                 <AdminUsers />
               </ProtectedRoute>
             }
@@ -251,7 +257,7 @@ export default function App() {
           <Route
             path="administration/roles"
             element={
-              <ProtectedRoute requiredPermission="Administration.View">
+              <ProtectedRoute>
                 <AdminRoles />
               </ProtectedRoute>
             }
@@ -259,7 +265,7 @@ export default function App() {
           <Route
             path="administration/permissions"
             element={
-              <ProtectedRoute requiredPermission="Administration.View">
+              <ProtectedRoute>
                 <AdminPermissions />
               </ProtectedRoute>
             }
@@ -267,7 +273,7 @@ export default function App() {
           <Route
             path="administration/server-configuration"
             element={
-              <ProtectedRoute requiredPermission="ServerConfiguration.View">
+              <ProtectedRoute>
                 <AdminServerConfiguration />
               </ProtectedRoute>
             }

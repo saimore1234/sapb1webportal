@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { login as loginApi, logout as logoutApi, getMe } from '../api/auth';
+import { buildAccess, canAccessPath, emptyAccess, hasPermission as evaluate, type AccessSnapshot } from '../permissions/evaluate';
 
 interface AuthUser {
   username: string;
@@ -21,6 +22,18 @@ interface AuthContextValue {
   /// GET /api/auth/me — the backend re-checks independently on every request,
   /// this is for hiding/showing UI only.
   can: (permissionKey: string) => boolean;
+  /// Central permission service — every UI permission check goes through these.
+  /// Backed by the same rules the server enforces (see permissions/evaluate.ts).
+  access: AccessSnapshot;
+  hasPermission: (moduleKey: string, pageKey: string | null | undefined, action: string) => boolean;
+  canView: (moduleKey: string, pageKey?: string | null) => boolean;
+  canCreate: (moduleKey: string, pageKey?: string | null) => boolean;
+  canEdit: (moduleKey: string, pageKey?: string | null) => boolean;
+  canDelete: (moduleKey: string, pageKey?: string | null) => boolean;
+  canExport: (moduleKey: string, pageKey?: string | null) => boolean;
+  canApprove: (moduleKey: string, pageKey?: string | null) => boolean;
+  /// Route-level check resolved through the navigation registry.
+  canAccessPath: (pathname: string, action?: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -34,19 +47,16 @@ const USER_KEY = 'sapb1_user';
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSuperUser, setIsSuperUser] = useState(false);
-  const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [access, setAccess] = useState<AccessSnapshot>(emptyAccess());
 
   async function loadPermissions() {
     try {
       const me = await getMe();
-      setIsSuperUser(me.isSuperUser);
-      setPermissions(new Set(me.permissions));
+      setAccess(buildAccess(me.isSuperUser, me.permissions, me.pageRules ?? {}));
     } catch {
       // Non-fatal — can() just returns false for everything until a retry
       // (e.g. next login) succeeds; the backend still enforces independently.
-      setIsSuperUser(false);
-      setPermissions(new Set());
+      setAccess(emptyAccess());
     }
   }
 
@@ -72,8 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       companyName: response.companyName
     };
     localStorage.setItem(USER_KEY, JSON.stringify(authUser));
-    setUser(authUser);
+    // Permissions first, so route guards never see an authenticated user with an empty set.
     await loadPermissions();
+    setUser(authUser);
   }
 
   async function logout() {
@@ -89,8 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
       setUser(null);
-      setIsSuperUser(false);
-      setPermissions(new Set());
+      setAccess(emptyAccess());
     }
   }
 
@@ -100,14 +110,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return roles.includes(user.role);
   }
 
+  const hasPermission = (moduleKey: string, pageKey: string | null | undefined, action: string) =>
+    !!user && evaluate(access, moduleKey, pageKey, action);
+
+  /// Legacy "Module.Action" key form (module-level check).
   function can(permissionKey: string) {
-    if (!user) return false;
-    if (isSuperUser) return true;
-    return permissions.has(permissionKey);
+    const [moduleKey, action] = permissionKey.split('.');
+    return hasPermission(moduleKey, null, action);
   }
 
+  const forAction = (action: string) => (moduleKey: string, pageKey?: string | null) => hasPermission(moduleKey, pageKey, action);
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasRole, can }}>
+    <AuthContext.Provider value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        login,
+        logout,
+        hasRole,
+        can,
+        access,
+        hasPermission,
+        canView: forAction('View'),
+        canCreate: forAction('Create'),
+        canEdit: forAction('Edit'),
+        canDelete: forAction('Delete'),
+        canExport: forAction('Export'),
+        canApprove: forAction('Approve'),
+        canAccessPath: (pathname, action) => !!user && canAccessPath(access, pathname, action)
+      }}>
       {children}
     </AuthContext.Provider>
   );

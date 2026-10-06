@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
@@ -9,6 +9,10 @@ import ModuleBar from './shell/ModuleBar';
 import StatusBar from './shell/StatusBar';
 import ShellDialogs from './shell/ShellDialogs';
 import { ShellProvider, useShell } from './shell/ShellContext';
+import { useAuth } from '../context/AuthContext';
+import AccessDenied from '../components/AccessDenied';
+import { navItems } from './navigation';
+import { firstAccessibleRoute } from '../permissions/navigation';
 
 const SIDEBAR_COLLAPSED_KEY = 'b1_sidebar_collapsed';
 
@@ -31,6 +35,11 @@ function Shell() {
       return false;
     }
   });
+  const { access, canAccessPath } = useAuth();
+
+  // Generic route guard: the path is resolved through the navigation registry to its
+  // module/page and checked by the central permission service.
+  const denied = !canAccessPath(location.pathname);
 
   useEffect(() => {
     try {
@@ -60,6 +69,12 @@ function Shell() {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [setSearchOpen, setModulesOpen, modulesOpen, navigate]);
 
+  // Users who can't see the home page land on the first page they can open.
+  if (location.pathname === '/' && denied) {
+    const landing = firstAccessibleRoute(navItems, access);
+    if (landing) return <Navigate to={landing} replace />;
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-bg">
       <TopHeader />
@@ -79,7 +94,7 @@ function Shell() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.16, ease: 'easeOut' }}
             >
-              <Outlet />
+              {denied ? <AccessDenied /> : <Outlet />}
             </motion.div>
           </AnimatePresence>
         </main>

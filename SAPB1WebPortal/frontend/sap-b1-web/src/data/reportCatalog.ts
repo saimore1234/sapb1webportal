@@ -4,6 +4,7 @@ import {
   BarChart3, Activity
 } from 'lucide-react';
 import type { ReportDataSourceKey } from './reportDataSources';
+import { salesReports } from './salesReports';
 
 export type ReportCategoryId =
   | 'sales' | 'purchase' | 'inventory' | 'production' | 'finance'
@@ -73,6 +74,10 @@ const NO_APPROVALS = 'This installation has no SAP B1 approval workflow configur
 
 export const reportCatalog: ReportDefinition[] = [
   // ------------------------------------------------------------- SALES
+  // Sales Dashboard sections, as full reports (see data/salesReports.ts).
+  ...salesReports
+    .filter((r) => r.built)
+    .map((r) => link(`sales-dashboard-${r.id}`, r.name, 'sales', r.description, r.path, ['dashboard'])),
   table('sales-summary', 'Sales Summary', 'sales', 'Monthly sales value trend from real A/R invoices.', 'salesByMonth', ['revenue', 'summary']),
   table('sales-by-customer', 'Sales by Customer', 'sales', 'Top customers by invoiced revenue.', 'salesByCustomer', ['customer']),
   table('sales-by-item', 'Sales by Item', 'sales', 'Top-selling items by sales value and quantity.', 'salesByItem', ['item']),

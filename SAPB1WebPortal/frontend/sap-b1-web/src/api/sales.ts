@@ -16,7 +16,19 @@ import type {
   IncomingPayment,
   IncomingPaymentDetail,
   SalesDashboard,
-  SalesAnalytics
+  SalesAnalytics,
+  SalesOverview,
+  OpenSalesOrders,
+  InvoiceRegister,
+  InvoiceRegisterQuery,
+  CustomerOutstanding,
+  CustomerLookup,
+  CustomerLedger,
+  SalesAnalyticsQuery,
+  SalesAnalyticsReport,
+  SalesAnalyticsOptions,
+  TurnoverBreakup,
+  TurnoverQuery
 } from '../types';
 
 // Every function here talks to the existing GET /api/sales/* endpoints —
@@ -36,6 +48,33 @@ export const getSalesDashboard = () =>
 
 export const getSalesAnalytics = () =>
   unwrap<SalesAnalytics>(apiClient.get('/sales/analytics'), 'Failed to load sales analytics.');
+
+export const getSalesOverview = () =>
+  unwrap<SalesOverview>(apiClient.get('/sales/overview'), 'Failed to load the sales overview.');
+
+export const getOpenSalesOrdersBoard = (params: { filter?: string; search?: string; page?: number; pageSize?: number }) =>
+  unwrap<OpenSalesOrders>(apiClient.get('/sales/overview/open-orders', { params }), 'Failed to load open sales orders.');
+
+export const getInvoiceRegister = (query: InvoiceRegisterQuery) =>
+  unwrap<InvoiceRegister>(apiClient.get('/sales/reports/invoice-register', { params: query }), 'Failed to load the invoice register.');
+
+export const getCustomerOutstanding = () =>
+  unwrap<CustomerOutstanding>(apiClient.get('/sales/reports/customer-outstanding'), 'Failed to load customer outstanding.');
+
+export const lookupSalesCustomers = (search: string) =>
+  unwrap<CustomerLookup[]>(apiClient.get('/sales/reports/customer-lookup', { params: { search } }), 'Failed to search customers.');
+
+export const getCustomerLedger = (params: { customer: string; dateFrom?: string; dateTo?: string }) =>
+  unwrap<CustomerLedger>(apiClient.get('/sales/reports/customer-ledger', { params }), 'Customer not found.');
+
+export const getTurnoverBreakup = (params: TurnoverQuery) =>
+  unwrap<TurnoverBreakup>(apiClient.get('/sales/reports/turnover-breakup', { params }), 'Failed to load turnover.');
+
+export const getSalesAnalyticsOptions = () =>
+  unwrap<SalesAnalyticsOptions>(apiClient.get('/sales/reports/analytics-options'), 'Failed to load analytics filters.');
+
+export const getSalesAnalyticsReport = (query: SalesAnalyticsQuery) =>
+  unwrap<SalesAnalyticsReport>(apiClient.get('/sales/reports/analytics', { params: query }), 'Failed to load sales analytics.');
 
 export const getSalesQuotations = (query: SalesDocumentQuery) =>
   unwrap<PagedResult<SalesQuotation>>(apiClient.get('/sales/quotations', { params: query }), 'Failed to load sales quotations.');

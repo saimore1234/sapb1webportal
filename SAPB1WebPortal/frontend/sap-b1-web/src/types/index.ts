@@ -279,8 +279,11 @@ export interface CurrentUser {
   role: string;
   company: string;
   companyName: string;
+  /** True for full-access roles (portal admin / Administrator): every module and page, including future ones. */
   isSuperUser: boolean;
   permissions: string[];
+  /** Explicit page rules, "{module}.{page}.{action}" -> granted. */
+  pageRules: Record<string, boolean>;
 }
 
 export interface AdminUser {
@@ -327,10 +330,18 @@ export interface Permission {
   description: string | null;
 }
 
+export interface PagePermission {
+  moduleKey: string;
+  pageKey: string;
+  action: string;
+  isGranted: boolean;
+}
+
 export interface RolePermissions {
   roleId: number;
   roleName: string;
   permissionKeys: string[];
+  pagePermissions: PagePermission[];
 }
 
 // ---------------------------------------------------------------
@@ -1473,4 +1484,209 @@ export interface InventoryMovement {
   outQty: number;
   transactionType: string | null;
   description: string | null;
+}
+
+// ---- Sales Overview (client-approved dashboard) ----
+export interface SalesOverviewMonth {
+  period: string;
+  label: string;
+  value: number;
+  quantity: number;
+  previousValue: number;
+  previousQuantity: number;
+}
+
+export interface SalesOverview {
+  fyStart: string;
+  fyEnd: string;
+  fyLabel: string;
+  totalCustomers: number;
+  newCustomersThisQuarter: number;
+  openSalesOrders: number;
+  openSalesOrderValue: number;
+  pendingInvoices: number;
+  pendingInvoiceValue: number;
+  totalOutstanding: number;
+  overdueOutstanding: number;
+  overdueDaysThreshold: number;
+  monthly: SalesOverviewMonth[];
+  salesPersons: { salesEmployeeCode: number; salesEmployeeName: string | null; value: number }[];
+  topCustomers: { customerCode: string; customerName: string | null; value: number }[];
+  topItems: { itemCode: string; itemName: string | null; value: number; quantity: number }[];
+}
+
+export interface TurnoverQuery {
+  dateFrom?: string;
+  dateTo?: string;
+  customerGroup?: number;
+  location?: number;
+  branch?: number;
+}
+
+export interface TurnoverOption {
+  code: number;
+  name: string;
+}
+
+export interface TurnoverBreakup {
+  dateFrom: string;
+  dateTo: string;
+  totalTurnover: number;
+  customerGroupSales: { customerGroup: string; salesValue: number; percentage: number }[];
+  groupLocationBranchSales: { customerGroup: string; location: string; branch: string; salesValue: number; percentage: number }[];
+  customerGroups: TurnoverOption[];
+  locations: TurnoverOption[];
+  branches: TurnoverOption[];
+}
+
+export interface OpenSalesOrderRow {
+  docEntry: number;
+  docNum: number;
+  postingDate: string;
+  customerCode: string;
+  customerName: string | null;
+  city: string | null;
+  item: string | null;
+  lineCount: number;
+  orderedQty: number;
+  pendingQty: number;
+  uom: string | null;
+  productionStatus: string | null;
+  productionProgress: number | null;
+  eta: string | null;
+  deliveryStatus: 'Not Dispatched' | 'Part Dispatched' | 'Dispatched';
+  total: number;
+}
+
+export interface OpenSalesOrders {
+  totalOpen: number;
+  totalValue: number;
+  inProduction: number;
+  ready: number;
+  pending: number;
+  partDispatched: number;
+  totalCount: number;
+  rows: OpenSalesOrderRow[];
+}
+
+// ---- Sales Reports (Invoice Register, Outstanding, Ledger, Analytics) ----
+export interface InvoiceRegisterQuery {
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  dispatch?: 'all' | 'delivery' | 'direct';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface InvoiceRegisterRow {
+  docEntry: number;
+  docNum: number;
+  docDate: string;
+  customerCode: string;
+  customerName: string | null;
+  item: string | null;
+  lineCount: number;
+  quantity: number;
+  uom: string | null;
+  rate: number;
+  value: number;
+  dispatchStatus: 'Against Delivery' | 'Direct Invoice';
+  status: string;
+}
+
+export interface InvoiceRegister {
+  totalCount: number;
+  totalValue: number;
+  rows: InvoiceRegisterRow[];
+}
+
+export interface CustomerAgeingRow {
+  customerCode: string;
+  customerName: string | null;
+  salesPerson: string | null;
+  days0To30: number;
+  days31To60: number;
+  days61To90: number;
+  days90Plus: number;
+  total: number;
+  risk: 'Low' | 'Watch' | 'High';
+}
+
+export interface CustomerOutstanding {
+  asOf: string;
+  creditTermsDays: number;
+  total: number;
+  customerCount: number;
+  current: number;
+  overdue: number;
+  overdueCustomerCount: number;
+  buckets: { label: string; value: number }[];
+  customers: CustomerAgeingRow[];
+}
+
+export interface CustomerLookup {
+  customerCode: string;
+  customerName: string | null;
+}
+
+export interface LedgerRow {
+  date: string;
+  docType: string;
+  docNo: string | null;
+  particulars: string | null;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+export interface CustomerLedger {
+  customerCode: string;
+  customerName: string | null;
+  city: string | null;
+  taxNo: string | null;
+  dateFrom: string;
+  dateTo: string;
+  openingBalance: number;
+  totalDebit: number;
+  totalCredit: number;
+  closingBalance: number;
+  creditLimit: number;
+  currentBalance: number;
+  rows: LedgerRow[];
+}
+
+export interface SalesAnalyticsQuery {
+  customer?: string;
+  salesPerson?: number;
+  item?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface AnalyticsComparison {
+  key: string;
+  name: string | null;
+  value: number;
+  previousValue: number;
+}
+
+export interface SalesAnalyticsReport {
+  dateFrom: string;
+  dateTo: string;
+  quantity: number;
+  previousQuantity: number;
+  value: number;
+  previousValue: number;
+  averageRate: number;
+  previousAverageRate: number;
+  trend: { label: string; value: number; quantity: number }[];
+  customers: AnalyticsComparison[];
+  items: AnalyticsComparison[];
+}
+
+export interface SalesAnalyticsOptions {
+  customers: { key: string; name: string | null }[];
+  salesPersons: { key: string; name: string | null }[];
+  items: { key: string; name: string | null }[];
 }

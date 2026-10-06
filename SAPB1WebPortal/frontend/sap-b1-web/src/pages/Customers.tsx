@@ -11,8 +11,10 @@ import { ErrorState, EmptyState } from '../components/StateViews';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import ResponsiveTable, { type ColumnDef } from '../components/ui/ResponsiveTable';
 import { useToast } from '../context/ToastContext';
+import { usePermissions } from '../permissions/usePermissions';
 
 export default function Customers() {
+  const { canExport } = usePermissions();
   const navigate = useNavigate();
   const { show } = useToast();
   const [result, setResult] = useState<PagedResult<CustomerListItem> | null>(null);
@@ -110,10 +112,12 @@ export default function Customers() {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
-          <button className="btn-secondary" onClick={exportCsv} disabled={!result || result.items.length === 0}>
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
-          </button>
+          {canExport && (
+            <button className="btn-secondary" onClick={exportCsv} disabled={!result || result.items.length === 0}>
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+          )}
         </div>
       </div>
 

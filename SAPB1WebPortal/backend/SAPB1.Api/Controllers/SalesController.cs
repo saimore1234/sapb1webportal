@@ -41,6 +41,22 @@ public class SalesController : ControllerBase
         return Ok(ApiResponse<SalesAnalyticsDto>.Ok(result));
     }
 
+    [HttpGet("overview")]
+    public async Task<ActionResult<ApiResponse<SalesOverviewDto>>> GetOverview(CancellationToken ct)
+    {
+        var result = await _salesService.GetOverviewAsync(ct);
+        return Ok(ApiResponse<SalesOverviewDto>.Ok(result));
+    }
+
+    /// <param name="filter">all | production | ready | pending | part (delivery/production bucket).</param>
+    [HttpGet("overview/open-orders")]
+    public async Task<ActionResult<ApiResponse<OpenSalesOrdersDto>>> GetOpenOrdersBoard(
+        [FromQuery] string? filter, [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 8, CancellationToken ct = default)
+    {
+        var result = await _salesService.GetOpenOrdersBoardAsync(filter, search, Math.Max(1, page), Math.Clamp(pageSize, 1, 50), ct);
+        return Ok(ApiResponse<OpenSalesOrdersDto>.Ok(result));
+    }
+
     [HttpGet("quotations")]
     public async Task<ActionResult<ApiResponse<PagedResult<SalesQuotationDto>>>> GetQuotations([FromQuery] SalesDocumentQuery query, CancellationToken ct)
     {

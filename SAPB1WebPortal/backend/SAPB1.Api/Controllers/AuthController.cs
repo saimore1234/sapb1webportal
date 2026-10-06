@@ -128,9 +128,7 @@ public class AuthController : ControllerBase
         var isAdmin = User.IsInRole(Roles.Admin);
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
 
-        var permissions = isAdmin
-            ? new List<string>()
-            : (await _adminService.GetPermissionsForRoleNameAsync(role, ct)).ToList();
+        var access = isAdmin ? new RoleAccess(true) : await _adminService.GetRoleAccessAsync(role, ct);
 
         var dto = new CurrentUserDto
         {
@@ -138,8 +136,9 @@ public class AuthController : ControllerBase
             Role = role,
             Company = User.FindFirstValue(AppClaimTypes.CompanyDb) ?? string.Empty,
             CompanyName = User.FindFirstValue(AppClaimTypes.CompanyName) ?? string.Empty,
-            IsSuperUser = isAdmin,
-            Permissions = permissions
+            IsSuperUser = access.IsFullAccess,
+            Permissions = access.ModuleKeys.ToList(),
+            PageRules = access.PageRules.ToDictionary(kv => kv.Key, kv => kv.Value)
         };
 
         return Ok(ApiResponse<CurrentUserDto>.Ok(dto));

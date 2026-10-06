@@ -6,6 +6,7 @@ import { TableSkeleton } from '../ui/Skeleton';
 import ResponsiveTable from '../ui/ResponsiveTable';
 import type { ReportDataSource } from '../../data/reportDataSources';
 import { exportRowsToCsv } from '../../utils/csvExport';
+import { usePermissions } from '../../permissions/usePermissions';
 
 interface ReportViewerProps<T extends Record<string, unknown>> {
   title: string;
@@ -22,6 +23,7 @@ export default function ReportViewer<T extends Record<string, unknown>>({
   isFavorite,
   onToggleFavorite
 }: ReportViewerProps<T>) {
+  const { canExport } = usePermissions();
   const [rows, setRows] = useState<T[] | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -78,10 +80,12 @@ export default function ReportViewer<T extends Record<string, unknown>>({
           <button className="btn-secondary" onClick={load} aria-label="Refresh">
             <RefreshCw className="h-4 w-4" />
           </button>
-          <button className="btn-secondary" onClick={handleExport} disabled={!rows || rows.length === 0}>
-            <Download className="h-4 w-4" />
-            Export
-          </button>
+          {canExport && (
+            <button className="btn-secondary" onClick={handleExport} disabled={!rows || rows.length === 0}>
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+          )}
           <button className="btn-secondary" onClick={() => window.print()}>
             <Printer className="h-4 w-4" />
             Print

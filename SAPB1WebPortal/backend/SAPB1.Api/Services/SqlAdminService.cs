@@ -1,4 +1,7 @@
 using Dapper;
+using Microsoft.Data.SqlClient;
+using System.Text.RegularExpressions;
+using SAPB1.Api.Auth;
 using SAPB1.Api.DTOs.Admin;
 using SAPB1.Api.Interfaces;
 
@@ -156,16 +159,31 @@ public class SqlAdminService : IAdminService
             JOIN Permissions p ON p.Id = rp.PermissionId
             WHERE rp.RoleId = @RoleId", new { RoleId = roleId }, cancellationToken: ct));
 
-        return new RolePermissionsDto { RoleId = role.Id, RoleName = role.Name, PermissionKeys = keys.ToList() };
+        var rules = await ReadPageRulesAsync(db, roleId, ct);
+
+        return new RolePermissionsDto { RoleId = role.Id, RoleName = role.Name, PermissionKeys = keys.ToList(), PagePermissions = rules.ToList() };
     }
 
-    public async Task<bool> UpdateRolePermissionsAsync(int roleId, List<string> permissionKeys, CancellationToken ct = default)
+    // Keys are identifiers from the navigation registry, not user text - still validated so
+    // nothing odd is ever persisted.
+    private static readonly Regex KeyPattern = new(@"^[A-Za-z][A-Za-z0-9_-]{0,49}$", RegexOptions.Compiled);
+    private static readonly Regex PageKeyPattern = new(@"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$", RegexOptions.Compiled);
+
+    public async Task<bool> UpdateRolePermissionsAsync(int roleId, List<string> permissionKeys, List<PagePermissionDto>? pagePermissions, CancellationToken ct = default)
     {
+        // "Module.Action" pairs; anything malformed is dropped.
+        var moduleKeys = permissionKeys
+            .Select(k => k.Split('.'))
+            .Where(p => p.Length == 2 && KeyPattern.IsMatch(p[0]) && KeyPattern.IsMatch(p[1]))
+            .Select(p => (Module: p[0], Action: p[1], Key: $"{p[0]}.{p[1]}"))
+            .DistinctBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         using var db = _connectionFactory.CreateConnection();
         db.Open();
         using var tx = db.BeginTransaction();
 
-        // Administrator (IsSystemRole = 1) always keeps every permission — never editable.
+        // Administrator (IsSystemRole = 1) always keeps every permission - never editable.
         var isSystemRole = await db.ExecuteScalarAsync<bool>(new CommandDefinition(
             "SELECT IsSystemRole FROM Roles WHERE Id = @Id", new { Id = roleId }, transaction: tx, cancellationToken: ct));
         if (isSystemRole)
@@ -174,32 +192,98 @@ public class SqlAdminService : IAdminService
             return false;
         }
 
+        // Modules/actions are data-driven: a key the Permissions table has never seen
+        // (e.g. a module added to navigation later) is registered on first use.
+        foreach (var m in moduleKeys)
+        {
+            await db.ExecuteAsync(new CommandDefinition(@"
+                IF NOT EXISTS (SELECT 1 FROM Permissions WHERE PermissionKey = @Key)
+                    INSERT INTO Permissions (Module, Action, PermissionKey, Description)
+                    VALUES (@Module, @Action, @Key, @Action + ' access to ' + @Module)",
+                new { m.Module, m.Action, m.Key }, transaction: tx, cancellationToken: ct));
+        }
+
         await db.ExecuteAsync(new CommandDefinition(
             "DELETE FROM RolePermissions WHERE RoleId = @RoleId", new { RoleId = roleId }, transaction: tx, cancellationToken: ct));
 
-        if (permissionKeys.Count > 0)
+        if (moduleKeys.Count > 0)
         {
             await db.ExecuteAsync(new CommandDefinition(@"
                 INSERT INTO RolePermissions (RoleId, PermissionId)
                 SELECT @RoleId, p.Id FROM Permissions p WHERE p.PermissionKey IN @Keys",
-                new { RoleId = roleId, Keys = permissionKeys }, transaction: tx, cancellationToken: ct));
+                new { RoleId = roleId, Keys = moduleKeys.Select(m => m.Key).ToList() }, transaction: tx, cancellationToken: ct));
+        }
+
+        // Page rules are upserted per (module, page, action); rules for pages not in the payload
+        // (e.g. pages since removed from navigation) are left alone - orphaned, never deleted.
+        if (pagePermissions is { Count: > 0 })
+        {
+            try
+            {
+                await db.ExecuteScalarAsync<int>(new CommandDefinition("SELECT COUNT(*) FROM RolePagePermissions", transaction: tx, cancellationToken: ct));
+            }
+            catch (SqlException ex) when (ex.Number == InvalidObjectName)
+            {
+                throw new InvalidOperationException("Page-level permissions are not set up in the portal database yet. Run db/005_CreatePagePermissions.sql as a database administrator, then save again.");
+            }
+
+            foreach (var r in pagePermissions.Where(r => KeyPattern.IsMatch(r.ModuleKey) && PageKeyPattern.IsMatch(r.PageKey) && KeyPattern.IsMatch(r.Action)))
+            {
+                await db.ExecuteAsync(new CommandDefinition(@"
+                    MERGE RolePagePermissions AS t
+                    USING (SELECT @RoleId AS RoleId, @ModuleKey AS ModuleKey, @PageKey AS PageKey, @Action AS Action) AS s
+                       ON t.RoleId = s.RoleId AND t.ModuleKey = s.ModuleKey AND t.PageKey = s.PageKey AND t.Action = s.Action
+                    WHEN MATCHED THEN UPDATE SET IsGranted = @IsGranted, UpdatedAt = SYSUTCDATETIME()
+                    WHEN NOT MATCHED THEN INSERT (RoleId, ModuleKey, PageKey, Action, IsGranted)
+                         VALUES (@RoleId, @ModuleKey, @PageKey, @Action, @IsGranted);",
+                    new { RoleId = roleId, r.ModuleKey, r.PageKey, r.Action, r.IsGranted }, transaction: tx, cancellationToken: ct));
+            }
         }
 
         tx.Commit();
         return true;
     }
 
-    public async Task<HashSet<string>> GetPermissionsForRoleNameAsync(string roleName, CancellationToken ct = default)
+    public async Task<RoleAccess> GetRoleAccessAsync(string roleName, CancellationToken ct = default)
     {
         using var db = _connectionFactory.CreateConnection();
-        const string sql = @"
-            SELECT p.PermissionKey
-            FROM Roles r
-            JOIN RolePermissions rp ON rp.RoleId = r.Id
-            JOIN Permissions p ON p.Id = rp.PermissionId
-            WHERE r.Name = @RoleName";
+        var role = await db.QuerySingleOrDefaultAsync<RoleLookup>(new CommandDefinition(
+            "SELECT Id, IsSystemRole FROM Roles WHERE Name = @RoleName", new { RoleName = roleName }, cancellationToken: ct));
+        if (role is null) return new RoleAccess(false);
+        if (role.IsSystemRole) return new RoleAccess(true);
 
-        var keys = await db.QueryAsync<string>(new CommandDefinition(sql, new { RoleName = roleName }, cancellationToken: ct));
-        return keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var keys = await db.QueryAsync<string>(new CommandDefinition(@"
+            SELECT p.PermissionKey FROM RolePermissions rp
+            JOIN Permissions p ON p.Id = rp.PermissionId
+            WHERE rp.RoleId = @RoleId", new { RoleId = role.Id }, cancellationToken: ct));
+
+        var rules = await ReadPageRulesAsync(db, role.Id, ct);
+
+        return new RoleAccess(false, keys,
+            rules.Select(r => new KeyValuePair<string, bool>(RoleAccess.PageKey(r.ModuleKey, r.PageKey, r.Action), r.IsGranted)));
+    }
+
+    private const int InvalidObjectName = 208;
+
+    /// <summary>Page rules for a role. If dbo.RolePagePermissions hasn't been created yet
+    /// (db/005 not applied) there are simply no rules, so every page inherits its module grant.</summary>
+    private static async Task<List<PagePermissionDto>> ReadPageRulesAsync(System.Data.IDbConnection db, int roleId, CancellationToken ct)
+    {
+        try
+        {
+            return (await db.QueryAsync<PagePermissionDto>(new CommandDefinition(
+                "SELECT ModuleKey, PageKey, Action, IsGranted FROM RolePagePermissions WHERE RoleId = @RoleId",
+                new { RoleId = roleId }, cancellationToken: ct))).ToList();
+        }
+        catch (SqlException ex) when (ex.Number == InvalidObjectName)
+        {
+            return new List<PagePermissionDto>();
+        }
+    }
+
+    private sealed class RoleLookup
+    {
+        public int Id { get; set; }
+        public bool IsSystemRole { get; set; }
     }
 }

@@ -79,10 +79,12 @@ builder.Services.AddHostedService<ServerConfigurationCacheWarmupService>();
 // companies, not scoped by ICompanyContext (see Data/PortalConnectionFactory.cs).
 builder.Services.AddScoped<IPortalConnectionFactory, PortalConnectionFactory>();
 builder.Services.AddScoped<IAdminService, SqlAdminService>();
+builder.Services.AddHostedService<PortalSchemaBootstrapper>();
 
 builder.Services.AddScoped<ISapB1Service, SqlSapB1Service>();
 builder.Services.AddScoped<IPurchaseService, SqlPurchaseService>();
 builder.Services.AddScoped<ISalesService, SqlSalesService>();
+builder.Services.AddScoped<ISalesReportsService, SqlSalesReportsService>();
 builder.Services.AddScoped<IProductionService, SqlProductionService>();
 builder.Services.AddScoped<IFinanceService, SqlFinanceService>();
 builder.Services.AddScoped<IReportsService, SqlReportsService>();
@@ -165,7 +167,7 @@ builder.Services.AddSingleton<ITokenRevocationStore, TokenRevocationStore>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.Add<PageAccessFilter>());
 
 // ---------------------------------------------------------------
 // CORS — only the configured frontend origin(s) may call this API.

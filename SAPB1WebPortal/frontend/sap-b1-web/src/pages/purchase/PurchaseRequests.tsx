@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import PurchaseDocumentList from '../../components/purchase/PurchaseDocumentList';
 import { getPurchaseRequests } from '../../api/purchase';
-import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../permissions/usePermissions';
 import type { PurchaseRequest } from '../../types';
 import type { ColumnDef } from '../../components/ui/ResponsiveTable';
 
@@ -22,7 +22,7 @@ const columns: ColumnDef<PurchaseRequest>[] = [
 ];
 
 export default function PurchaseRequests() {
-  const { can } = useAuth();
+  const { canCreate } = usePermissions();
 
   return (
     <PurchaseDocumentList
@@ -36,7 +36,7 @@ export default function PurchaseRequests() {
       filterFields={['date', 'status']}
       emptyMessage="No purchase requests found."
       headerAction={
-        can('Purchase.Create') ? (
+        canCreate ? (
           <Link to="/purchase/requests/new" className="btn-primary text-sm py-2 px-3.5">
             <Plus className="h-4 w-4" />
             Create Purchase Request

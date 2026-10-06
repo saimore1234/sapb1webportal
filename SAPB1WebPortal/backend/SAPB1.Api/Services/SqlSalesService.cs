@@ -720,4 +720,202 @@ public class SqlSalesService : ISalesService
             IncomingPaymentsValue = summary.IncomingPaymentsValue
         };
     }
+
+    // ---------------------------------------------------------------
+    // SALES OVERVIEW (client-approved dashboard — stage 1)
+    // Financial year runs Apr–Mar. All figures are real documents; cancelled
+    // invoices (CANCELED <> 'N') are excluded.
+    // ---------------------------------------------------------------
+    private static (DateTime FyStart, DateTime FyEnd) CurrentFy(DateTime today)
+    {
+        var startYear = today.Month >= 4 ? today.Year : today.Year - 1;
+        return (new DateTime(startYear, 4, 1), new DateTime(startYear + 1, 3, 31));
+    }
+
+    public async Task<SalesOverviewDto> GetOverviewAsync(CancellationToken ct = default)
+    {
+        using var db = _connectionFactory.CreateConnection();
+
+        var today = DateTime.Today;
+        var (fyStart, fyEnd) = CurrentFy(today);
+        var prevFyStart = fyStart.AddYears(-1);
+        var monthsIntoFy = (today.Year * 12 + today.Month - 1) - (fyStart.Year * 12 + fyStart.Month - 1);
+        var quarterStart = fyStart.AddMonths(monthsIntoFy / 3 * 3);
+
+        var p = new DynamicParameters();
+        p.Add("FyStart", fyStart);
+        p.Add("FyEnd", fyEnd);
+        p.Add("PrevFyStart", prevFyStart);
+        p.Add("QuarterStart", quarterStart);
+        p.Add("OverdueCutoff", today.AddDays(-60));
+
+        const string kpiSql = @"
+            SELECT
+                (SELECT COUNT(*) FROM OCRD WHERE CardType = 'C' AND frozenFor = 'N') AS TotalCustomers,
+                (SELECT COUNT(*) FROM OCRD WHERE CardType = 'C' AND CreateDate >= @QuarterStart) AS NewCustomersThisQuarter,
+                (SELECT COUNT(*) FROM ORDR WHERE DocStatus = 'O' AND CANCELED = 'N') AS OpenSalesOrders,
+                (SELECT ISNULL(SUM(DocTotal), 0) FROM ORDR WHERE DocStatus = 'O' AND CANCELED = 'N') AS OpenSalesOrderValue,
+                (SELECT COUNT(*) FROM ODLN WHERE DocStatus = 'O' AND CANCELED = 'N') AS PendingInvoices,
+                (SELECT ISNULL(SUM(DocTotal), 0) FROM ODLN WHERE DocStatus = 'O' AND CANCELED = 'N') AS PendingInvoiceValue,
+                (SELECT ISNULL(SUM(DocTotal - PaidToDate), 0) FROM OINV WHERE DocStatus = 'O' AND CANCELED = 'N') AS TotalOutstanding,
+                (SELECT ISNULL(SUM(DocTotal - PaidToDate), 0) FROM OINV WHERE DocStatus = 'O' AND CANCELED = 'N' AND DocDate < @OverdueCutoff) AS OverdueOutstanding";
+        var dto = await db.QuerySingleAsync<SalesOverviewDto>(new CommandDefinition(kpiSql, p, cancellationToken: ct));
+
+        dto.FyStart = fyStart;
+        dto.FyEnd = fyEnd;
+        dto.FyLabel = $"FY {fyStart.Year}-{(fyEnd.Year % 100):00}";
+        dto.OverdueDaysThreshold = 60;
+
+        // Monthly: this FY vs previous FY. Value comes from headers and quantity from
+        // lines in separate queries, so header totals are never multiplied by line count.
+        const string monthValueSql = @"
+            SELECT CONVERT(varchar(7), DocDate, 120) AS Period, SUM(DocTotal) AS Value
+            FROM OINV
+            WHERE CANCELED = 'N' AND DocDate >= @PrevFyStart AND DocDate <= @FyEnd
+            GROUP BY CONVERT(varchar(7), DocDate, 120)";
+        const string monthQtySql = @"
+            SELECT CONVERT(varchar(7), h.DocDate, 120) AS Period, SUM(l.Quantity) AS Quantity
+            FROM OINV h JOIN INV1 l ON l.DocEntry = h.DocEntry
+            WHERE h.CANCELED = 'N' AND h.DocDate >= @PrevFyStart AND h.DocDate <= @FyEnd
+            GROUP BY CONVERT(varchar(7), h.DocDate, 120)";
+        var values = (await db.QueryAsync<(string Period, decimal Value)>(new CommandDefinition(monthValueSql, p, cancellationToken: ct)))
+            .ToDictionary(x => x.Period, x => x.Value);
+        var qtys = (await db.QueryAsync<(string Period, double Quantity)>(new CommandDefinition(monthQtySql, p, cancellationToken: ct)))
+            .ToDictionary(x => x.Period, x => x.Quantity);
+
+        for (var i = 0; i < 12; i++)
+        {
+            var m = fyStart.AddMonths(i);
+            var key = m.ToString("yyyy-MM");
+            var prevKey = m.AddYears(-1).ToString("yyyy-MM");
+            dto.Monthly.Add(new SalesOverviewMonthDto
+            {
+                Period = key,
+                Label = m.ToString("MMM"),
+                Value = values.GetValueOrDefault(key),
+                Quantity = qtys.GetValueOrDefault(key),
+                PreviousValue = values.GetValueOrDefault(prevKey),
+                PreviousQuantity = qtys.GetValueOrDefault(prevKey)
+            });
+        }
+
+        const string personSql = @"
+            SELECT TOP 8 h.SlpCode AS SalesEmployeeCode, s.SlpName AS SalesEmployeeName, SUM(h.DocTotal) AS Value
+            FROM OINV h LEFT JOIN OSLP s ON s.SlpCode = h.SlpCode
+            WHERE h.CANCELED = 'N' AND h.DocDate >= @FyStart AND h.DocDate <= @FyEnd
+            GROUP BY h.SlpCode, s.SlpName
+            ORDER BY SUM(h.DocTotal) DESC";
+        dto.SalesPersons = (await db.QueryAsync<SalesByEmployeeDto>(new CommandDefinition(personSql, p, cancellationToken: ct))).ToList();
+
+        const string customerSql = @"
+            SELECT TOP 8 h.CardCode AS CustomerCode, MAX(h.CardName) AS CustomerName, SUM(h.DocTotal) AS Value
+            FROM OINV h
+            WHERE h.CANCELED = 'N' AND h.DocDate >= @FyStart AND h.DocDate <= @FyEnd
+            GROUP BY h.CardCode
+            ORDER BY SUM(h.DocTotal) DESC";
+        dto.TopCustomers = (await db.QueryAsync<SalesByCustomerDto>(new CommandDefinition(customerSql, p, cancellationToken: ct))).ToList();
+
+        const string itemSql = @"
+            SELECT TOP 6 l.ItemCode, MAX(l.Dscription) AS ItemName, SUM(l.LineTotal) AS Value, SUM(l.Quantity) AS Quantity
+            FROM INV1 l JOIN OINV h ON h.DocEntry = l.DocEntry
+            WHERE h.CANCELED = 'N' AND h.DocDate >= @FyStart AND h.DocDate <= @FyEnd AND l.ItemCode IS NOT NULL
+            GROUP BY l.ItemCode
+            ORDER BY SUM(l.LineTotal) DESC";
+        dto.TopItems = (await db.QueryAsync<SalesByItemDto>(new CommandDefinition(itemSql, p, cancellationToken: ct))).ToList();
+
+        return dto;
+    }
+
+    /// <summary>
+    /// Open sales orders with delivery progress (RDR1 open vs ordered qty) and,
+    /// when a linked production order exists (OWOR.OriginType 'S' / OriginNum =
+    /// the order's DocNum), production status and % complete. Companies that
+    /// don't use production simply get null there — never a made-up value.
+    /// </summary>
+    public async Task<OpenSalesOrdersDto> GetOpenOrdersBoardAsync(string? filter, string? search, int page, int pageSize, CancellationToken ct = default)
+    {
+        using var db = _connectionFactory.CreateConnection();
+
+        const string sql = @"
+            SELECT TOP 2000
+                h.DocEntry, h.DocNum, h.DocDate AS PostingDate, h.CardCode AS CustomerCode, h.CardName AS CustomerName,
+                c.City, h.DocDueDate AS Eta, h.DocTotal AS Total,
+                (SELECT TOP 1 l.Dscription FROM RDR1 l WHERE l.DocEntry = h.DocEntry ORDER BY l.LineNum) AS Item,
+                (SELECT TOP 1 l.unitMsr FROM RDR1 l WHERE l.DocEntry = h.DocEntry ORDER BY l.LineNum) AS Uom,
+                (SELECT COUNT(*) FROM RDR1 l WHERE l.DocEntry = h.DocEntry) AS LineCount,
+                (SELECT ISNULL(SUM(l.Quantity), 0) FROM RDR1 l WHERE l.DocEntry = h.DocEntry) AS OrderedQty,
+                (SELECT ISNULL(SUM(l.OpenQty), 0) FROM RDR1 l WHERE l.DocEntry = h.DocEntry AND l.LineStatus = 'O') AS PendingQty,
+                (SELECT COUNT(*) FROM OWOR w WHERE w.OriginType = 'S' AND w.OriginNum = h.DocNum AND w.Status <> 'C') AS ProdOrders,
+                (SELECT COUNT(*) FROM OWOR w WHERE w.OriginType = 'S' AND w.OriginNum = h.DocNum AND w.Status = 'R') AS ProdReleased,
+                (SELECT ISNULL(SUM(w.PlannedQty), 0) FROM OWOR w WHERE w.OriginType = 'S' AND w.OriginNum = h.DocNum AND w.Status <> 'C') AS ProdPlanned,
+                (SELECT ISNULL(SUM(w.CmpltQty), 0) FROM OWOR w WHERE w.OriginType = 'S' AND w.OriginNum = h.DocNum AND w.Status <> 'C') AS ProdComplete
+            FROM ORDR h
+            LEFT JOIN OCRD c ON c.CardCode = h.CardCode
+            WHERE h.DocStatus = 'O' AND h.CANCELED = 'N'
+            ORDER BY h.DocDate DESC, h.DocEntry DESC";
+
+        var raw = (await db.QueryAsync(new CommandDefinition(sql, cancellationToken: ct))).ToList();
+
+        var rows = new List<OpenSalesOrderRowDto>();
+        foreach (var r in raw)
+        {
+            double ordered = Convert.ToDouble(r.OrderedQty);
+            double pending = Convert.ToDouble(r.PendingQty);
+            int prodOrders = Convert.ToInt32(r.ProdOrders);
+            double planned = Convert.ToDouble(r.ProdPlanned);
+            double done = Convert.ToDouble(r.ProdComplete);
+
+            string? prodStatus = null;
+            double? progress = null;
+            if (prodOrders > 0)
+            {
+                progress = planned > 0 ? Math.Min(100, Math.Round(done / planned * 100, 0)) : 0;
+                prodStatus = progress >= 100 ? "Ready" : Convert.ToInt32(r.ProdReleased) > 0 ? "In Production" : "Pending";
+            }
+
+            rows.Add(new OpenSalesOrderRowDto
+            {
+                DocEntry = r.DocEntry, DocNum = r.DocNum, PostingDate = r.PostingDate,
+                CustomerCode = r.CustomerCode, CustomerName = r.CustomerName, City = r.City,
+                Item = r.Item, Uom = r.Uom, LineCount = r.LineCount,
+                OrderedQty = ordered, PendingQty = pending,
+                ProductionStatus = prodStatus, ProductionProgress = progress,
+                Eta = r.Eta, Total = r.Total,
+                DeliveryStatus = pending <= 0 ? "Dispatched" : pending >= ordered ? "Not Dispatched" : "Part Dispatched"
+            });
+        }
+
+        var result = new OpenSalesOrdersDto
+        {
+            TotalOpen = rows.Count,
+            TotalValue = rows.Sum(x => x.Total),
+            InProduction = rows.Count(x => x.ProductionStatus == "In Production"),
+            Ready = rows.Count(x => x.ProductionStatus == "Ready"),
+            Pending = rows.Count(x => x.ProductionStatus == "Pending"),
+            PartDispatched = rows.Count(x => x.DeliveryStatus == "Part Dispatched")
+        };
+
+        IEnumerable<OpenSalesOrderRowDto> filtered = rows;
+        filtered = filter?.Trim().ToLowerInvariant() switch
+        {
+            "production" => filtered.Where(x => x.ProductionStatus == "In Production"),
+            "ready" => filtered.Where(x => x.ProductionStatus == "Ready"),
+            "pending" => filtered.Where(x => x.ProductionStatus == "Pending"),
+            "part" => filtered.Where(x => x.DeliveryStatus == "Part Dispatched"),
+            _ => filtered
+        };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            filtered = filtered.Where(x =>
+                x.DocNum.ToString().Contains(t, StringComparison.OrdinalIgnoreCase)
+                || (x.CustomerName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (x.Item?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        var list = filtered.ToList();
+        result.TotalCount = list.Count;
+        result.Rows = list.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return result;
+    }
 }
