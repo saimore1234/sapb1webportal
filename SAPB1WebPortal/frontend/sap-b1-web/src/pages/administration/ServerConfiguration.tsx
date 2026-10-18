@@ -5,7 +5,10 @@ import { TableSkeleton } from '../../components/ui/Skeleton';
 import ResponsiveTable, { type ColumnDef } from '../../components/ui/ResponsiveTable';
 import Modal from '../../components/ui/Modal';
 import ServerConfigurationForm, {
+  ConfigModalShell,
   emptyServerConfigFormValues,
+  toTestPayload,
+  useConnectionTest,
   type ServerConfigFormValues,
   type TestKind
 } from '../../components/admin/ServerConfigurationForm';
@@ -33,131 +36,12 @@ function formatDate(value: string | null) {
   return Number.isNaN(d.getTime()) ? '—' : new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
 }
 
-function toTestPayload(v: ServerConfigFormValues) {
-  return {
-    sapCompanyDb: v.sapCompanyDb,
-    serviceLayerUrl: v.serviceLayerUrl,
-    sapUsername: v.sapUsername,
-    sapPassword: v.sapPassword,
-    sqlServer: v.sqlServer,
-    sqlDatabase: v.sqlDatabase,
-    sqlUsername: v.sqlUsername,
-    sqlPassword: v.sqlPassword,
-    sqlExtraOptions: v.sqlExtraOptions || null
-  };
-}
-
 /** Tests the in-progress (not-yet-saved) form values via the pre-save endpoints. */
 async function testFormValues(kind: TestKind, values: ServerConfigFormValues): Promise<{ sql?: TestConnectionResult; sap?: TestConnectionResult }> {
   const payload = toTestPayload(values);
   if (kind === 'sql') return { sql: await testServerConfigurationFormSql(payload) };
   if (kind === 'sap') return { sap: await testServerConfigurationFormSap(payload) };
   return testServerConfigurationForm(payload);
-}
-
-/** Owns the connection-test state for one Add/Edit modal, so the sticky
- * footer's "Test All" button and the Connection Testing card's own three
- * buttons drive the exact same state instead of running independent tests. */
-function useConnectionTest(run: (kind: TestKind) => Promise<{ sql?: TestConnectionResult; sap?: TestConnectionResult }>) {
-  const [testingKind, setTestingKind] = useState<TestKind | null>(null);
-  const [sqlResult, setSqlResult] = useState<TestConnectionResult | null>(null);
-  const [sapResult, setSapResult] = useState<TestConnectionResult | null>(null);
-
-  async function onRunTest(kind: TestKind) {
-    setTestingKind(kind);
-    try {
-      const outcome = await run(kind);
-      if (outcome.sql) setSqlResult(outcome.sql);
-      if (outcome.sap) setSapResult(outcome.sap);
-    } catch (err: any) {
-      const message = err?.response?.data?.message || err.message || 'Test failed.';
-      if (kind === 'sql' || kind === 'all') setSqlResult({ success: false, message });
-      if (kind === 'sap' || kind === 'all') setSapResult({ success: false, message });
-    } finally {
-      setTestingKind(null);
-    }
-  }
-
-  const statusText = testingKind === 'sql'
-    ? 'Testing SQL connection…'
-    : testingKind === 'sap'
-      ? 'Testing SAP Service Layer…'
-      : testingKind === 'all'
-        ? 'Testing all connections…'
-        : sqlResult && sapResult
-          ? sqlResult.success && sapResult.success
-            ? 'Both connections successful'
-            : 'One or more connections failed — see details below'
-          : sqlResult
-            ? sqlResult.success ? 'SQL connection successful' : 'SQL connection failed'
-            : sapResult
-              ? sapResult.success ? 'SAP connection successful' : 'SAP connection failed'
-              : 'Ready';
-
-  return { testingKind, sqlResult, sapResult, onRunTest, statusText };
-}
-
-/** Sticky header + scrollable body + sticky footer shell for the large
- * Add/Edit Server / Company modal (Modal variant="large"). */
-function ConfigModalShell({
-  title,
-  subtitle,
-  error,
-  submitting,
-  statusText,
-  testingKind,
-  onCancel,
-  onTestAll,
-  children
-}: {
-  title: string;
-  subtitle: string;
-  error: string | null;
-  submitting: boolean;
-  statusText: string;
-  testingKind: TestKind | null;
-  onCancel: () => void;
-  onTestAll: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="shrink-0 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-border px-4 sm:px-6 py-3.5 sm:py-4">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-ink-primary">{title}</h2>
-          <p className="hidden sm:block text-sm text-ink-secondary mt-0.5">{subtitle}</p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button type="button" className="btn-secondary text-sm py-2 px-3.5 flex-1 sm:flex-none" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="submit" className="btn-primary text-sm py-2 px-3.5 flex-1 sm:flex-none" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save Configuration'}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4">
-        {error && <div className="bg-danger-bg text-danger text-sm rounded-lg px-3.5 py-2.5">{error}</div>}
-        {children}
-      </div>
-
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 sm:px-6 py-3.5">
-        <span className="text-sm text-ink-tertiary">{statusText}</span>
-        <div className="flex gap-2">
-          <button type="button" className="btn-secondary text-sm py-2 px-3.5" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="button" className="btn-secondary text-sm py-2 px-3.5" onClick={onTestAll} disabled={testingKind !== null}>
-            {testingKind !== null ? 'Testing…' : 'Test All'}
-          </button>
-          <button type="submit" className="btn-primary text-sm py-2 px-3.5" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save Configuration'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default function ServerConfigurationPage() {

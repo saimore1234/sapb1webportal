@@ -1,5 +1,14 @@
 import { apiClient } from './client';
-import type { ApiResponse, CompanyOption, CurrentUser, LoginResponse } from '../types';
+import type {
+  ApiResponse,
+  CompanyOption,
+  CreateServerConfigurationPayload,
+  CurrentUser,
+  LoginResponse,
+  TestAllResult,
+  TestConnectionPayload,
+  TestConnectionResult
+} from '../types';
 
 /// Public list of configured SAP B1 companies for the login dropdown. Called
 /// before the user is authenticated — never returns connection info.
@@ -39,3 +48,27 @@ export async function getMe(): Promise<CurrentUser> {
 export async function logout(): Promise<void> {
   await apiClient.post('/auth/logout');
 }
+
+/// Login-page company setup. Anonymous, but every call carries the portal
+/// admin credential, which the server re-verifies before testing or saving.
+export interface CompanySetupAdmin {
+  adminUsername: string;
+  adminPassword: string;
+}
+
+async function companySetup<T>(path: string, admin: CompanySetupAdmin, configuration: object, failMessage: string): Promise<T> {
+  const { data } = await apiClient.post<ApiResponse<T>>(`/auth/company-setup${path}`, { ...admin, configuration });
+  if (!data.success || data.data === null || data.data === undefined) {
+    throw new Error(data.message || failMessage);
+  }
+  return data.data;
+}
+
+export const setupTestAll = (admin: CompanySetupAdmin, payload: TestConnectionPayload) =>
+  companySetup<TestAllResult>('/test', admin, payload, 'Connection test failed.');
+export const setupTestSql = (admin: CompanySetupAdmin, payload: TestConnectionPayload) =>
+  companySetup<TestConnectionResult>('/test-sql', admin, payload, 'SQL connection test failed.');
+export const setupTestSap = (admin: CompanySetupAdmin, payload: TestConnectionPayload) =>
+  companySetup<TestConnectionResult>('/test-sap', admin, payload, 'SAP connection test failed.');
+export const setupCreateCompany = (admin: CompanySetupAdmin, payload: CreateServerConfigurationPayload) =>
+  companySetup<{ id: number; code: string }>('', admin, payload, 'Failed to save company configuration.');

@@ -1,9 +1,10 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Loader2, ShieldCheck, Building2, ChevronDown, AlertCircle, Check, Clock } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldCheck, Building2, ChevronDown, AlertCircle, Check, Clock, Settings2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getCompanies } from '../api/auth';
+import CompanySetupModal from '../components/CompanySetupModal';
 import type { CompanyOption } from '../types';
 
 const REMEMBER_KEY = 'b1_remember';
@@ -33,6 +34,7 @@ export default function Login() {
   const [error, setError] = useState<LoginError | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +82,18 @@ export default function Login() {
   if (isAuthenticated) {
     const from = (location.state as { from?: Location })?.from?.pathname || '/';
     return <Navigate to={from} replace />;
+  }
+
+  async function onCompanyCreated(code: string) {
+    setSetupOpen(false);
+    setCompaniesError(null);
+    try {
+      const list = await getCompanies();
+      setCompanies(list);
+      if (list.some((c) => c.code === code)) setCompanyDb(code);
+    } catch {
+      setCompaniesError('Unable to load the company list. Please refresh and try again.');
+    }
   }
 
   function fail(kind: LoginError) {
@@ -321,6 +335,14 @@ export default function Login() {
                     ))}
                   </ul>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setSetupOpen(true)}
+                  className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 dark:text-brand-400 hover:underline underline-offset-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  {companies.length === 0 && !companiesLoading ? 'No company yet? Configure company' : 'Configure company'}
+                </button>
               </div>
 
               <div>
@@ -398,6 +420,8 @@ export default function Login() {
             </div>
           </motion.div>
         </div>
+
+        {setupOpen && <CompanySetupModal onClose={() => setSetupOpen(false)} onCreated={onCompanyCreated} />}
 
         <footer className="px-6 py-5 text-center text-xs text-ink-tertiary">© 2026 SAP B1 Business Hub · Enterprise Business Platform</footer>
       </main>
